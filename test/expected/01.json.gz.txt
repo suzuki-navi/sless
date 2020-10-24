@@ -1,0 +1,5 @@
+format=gzip
+format=json
+{
+  "abc": "ABC"
+}
