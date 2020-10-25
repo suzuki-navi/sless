@@ -12,9 +12,11 @@ while (@ARGV) {
     my $a = shift(@ARGV);
     if ($a eq "--json") {
         $format = "json";
+    } elsif ($a eq "--tsv") {
+        $format = "tsv";
     } elsif ($a eq "-v") {
         $verbose_flag = 1;
-    } elsif ($a eq "-c") {
+    } elsif ($a eq "--color") {
         $color_flag = 1;
     } else {
         die "Unknown argument: $a\n";
@@ -99,14 +101,14 @@ if ($gzip_flag || $xz_flag) {
         push(@options, "-v");
     }
     if ($color_flag) {
-        push(@options, "-c");
+        push(@options, "--color");
     }
 
     if ($verbose_flag) {
         if ($gzip_flag) {
-            print "format=gzip\n";
+            print STDERR "format=gzip\n";
         } elsif ($xz_flag) {
-            print "format=xz\n";
+            print STDERR "format=xz\n";
         }
     }
     exec("perl", "$SLESS_HOME/format-wrapper.pl", @options);
@@ -114,18 +116,18 @@ if ($gzip_flag || $xz_flag) {
 
 sub guess_format {
     my ($head_buf) = @_;
-    my $first_line;
-    if ($head_buf =~ /\A([^\n]*)\n/s) {
-        $first_line = $1;
-    } else {
-        $first_line = $head_buf;
+    my @lines = split(/\r?\n/, $head_buf);
+
+    if (@lines >= 2 && $lines[0] =~ /\t/ && $lines[1] =~ /\t/) {
+        return "tsv";
     }
-    if ($first_line =~ /\A\{/) {
+
+    if ($lines[0] =~ /\A\{/) {
         return "json";
-    } else {
-        # failed to guess format
-        return "text";
     }
+
+    # failed to guess format
+    return "text";
 }
 
 if ($format eq '') {
@@ -134,7 +136,7 @@ if ($format eq '') {
 
 # フォーマットの推定結果を出力
 if ($verbose_flag) {
-    print "format=$format\n";
+    print STDERR "format=$format\n";
 }
 
 if ($format eq "json") {
@@ -161,6 +163,30 @@ if ($format eq "json") {
         push(@options, "-M");
     }
     exec("jq", ".", @options);
+}
+
+if ($format eq "tsv") {
+    my $READER1;
+    my $WRITER1;
+    pipe($READER1, $WRITER1);
+
+    my $pid1 = fork;
+    die $! if (!defined $pid1);
+    if (!$pid1) {
+        # 読み込み済みの入力を標準出力し、残りはcatする
+        close $READER1;
+        open(STDOUT, '>&=', fileno($WRITER1));
+        syswrite(STDOUT, $head_buf);
+        exec("cat");
+    }
+    close $WRITER1;
+    open(STDIN, '<&=', fileno($READER1));
+
+    my @options = ();
+    if ($color_flag) {
+        push(@options, "--color");
+    }
+    exec("perl", "$SLESS_HOME/table.pl", @options);
 }
 
 # 先読みした内容を出力
