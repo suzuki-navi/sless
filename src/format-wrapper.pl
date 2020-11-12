@@ -123,7 +123,11 @@ sub guess_format {
     }
 
     if ($lines[0] =~ /\A\{/) {
-        return "json";
+        if (@lines >= 2 && $lines[1] =~ /\A\{/) {
+            return "jsonl";
+        } else {
+            return "json";
+        }
     }
 
     # failed to guess format
@@ -139,7 +143,7 @@ if ($verbose_flag) {
     print STDERR "format=$format\n";
 }
 
-if ($format eq "json") {
+if ($format eq "json" || $format eq "jsonl") {
     my $READER1;
     my $WRITER1;
     pipe($READER1, $WRITER1);
@@ -157,12 +161,16 @@ if ($format eq "json") {
     open(STDIN, '<&=', fileno($READER1));
 
     my @options = ();
+    push(@options, ".");
     if ($color_flag) {
         push(@options, "-C");
     } else {
         push(@options, "-M");
     }
-    exec("jq", ".", @options);
+    if ($format eq "jsonl") {
+        push(@options, "-c");
+    }
+    exec("jq", @options);
 }
 
 if ($format eq "tsv") {

@@ -2,6 +2,7 @@
 # 対応するフォーマット
 
 - JSON
+- JSON Lines
 - TSV
 - plain text
 - 圧縮ファイル
